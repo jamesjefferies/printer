@@ -8,8 +8,9 @@ class RemotePrinter
 
   def self.update(params)
     DataStore.redis.hset(key(params[:id]), "type", params[:type])
-    DataStore.redis.set("ip:#{params[:ip]}", params[:id])
-    DataStore.redis.expire("ip:#{params[:ip]}", 60)
+    now = Time.now.to_i
+    ip_key = "ip:#{params[:ip]}"
+    DataStore.redis.zadd(ip_key, now, params[:id])
   end
 
   def self.find(id)
@@ -17,8 +18,11 @@ class RemotePrinter
   end
 
   def self.find_by_ip(ip)
-    id = DataStore.redis.get("ip:#{ip}")
-    find(id) if id
+    ip_key = "ip:#{ip}"
+    now = Time.now.to_i
+    DataStore.redis.zremrangebyscore(ip_key, 0, now-60)
+    ids = DataStore.redis.zrangebyscore(ip_key, now-60, now)
+    ids.map { |id| find(id) }
   end
 
   attr_reader :id
