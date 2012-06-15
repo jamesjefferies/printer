@@ -7,9 +7,9 @@
 #include <Bounce.h>
 
 // -- Settings for YOU to change if you want
-// HEATHCLIFF
+//HEATHCLIFF
 
-byte mac[] = { 0x90, 0xA2, 0xDA, 0x00, 0xF1, 0x4E }; // physical mac address
+byte mac[] = { 0x90, 0xA2, 0xDA, 0x00, 0xF1, 0xE1 }; // physical mac address
 
 // The printerType controls the format of the data sent from the server
 // If you're using a completely different kind of printer, change this
@@ -197,7 +197,6 @@ void checkForDownload() {
           char *statusCode = "xxx";
           client.readBytes(statusCode, 3);
           statusOk = (strcmp(statusCode, "200") == 0);
-          debug2("status is: ", statusCode);
           client.find("Content-Length: ");
           char c;
           while (isdigit(c = client.read())) {
@@ -221,10 +220,6 @@ void checkForDownload() {
     cache.seek(0);
 
     if (statusOk) {
-      debug2("content length", content_length);
-      debug2("length", length);
-      debug2("cache.size()",cache.size());
-      
       if ((content_length == length) && (content_length == cache.size())) {
         if (content_length > 0) {
           downloadWaiting = true;
