@@ -9,7 +9,8 @@
 // -- Settings for YOU to change if you want
 //HEATHCLIFF
 
-byte mac[] = { 0x90, 0xA2, 0xDA, 0x00, 0xF1, 0xE1 }; // physical mac address
+byte mac[] = { 
+  0x90, 0xA2, 0xDA, 0x00, 0xF1, 0xE1 }; // physical mac address
 
 // The printerType controls the format of the data sent from the server
 // If you're using a completely different kind of printer, change this
@@ -46,10 +47,12 @@ const char* sketchVersion = "1.0.2";
 
 #ifdef DEBUG
 void debugTimeAndSeparator() {
-  Serial.print(millis()); Serial.print(": ");
+  Serial.print(millis()); 
+  Serial.print(": ");
 }
 void debug(char *a) {
-  debugTimeAndSeparator(); Serial.println(a);
+  debugTimeAndSeparator(); 
+  Serial.println(a);
 }
 #define debug2(a, b) debugTimeAndSeparator(); Serial.print(a); Serial.println(b);
 #else
@@ -73,7 +76,8 @@ inline void initSettings() {
       EEPROM.write(idAddress + i, printerId[i]);
       EEPROM.write(idAddress + i+1, printerId[i+1]);
     }
-  } else {
+  } 
+  else {
     for(int i = 0; i < 16; i++) {
       printerId[i] = (char)EEPROM.read(idAddress + i);
     }
@@ -161,13 +165,14 @@ void checkForDownload() {
   statusOk = false;
 
 #ifdef DEBUG
-    unsigned long start;
+  unsigned long start;
 #endif
 
   if (SD.exists(cacheFilename)) {
     if (SD.remove(cacheFilename)) {
       debug("Cleared cache");
-    } else {
+    } 
+    else {
       debug("Failed to clear cache");
     }
   }
@@ -177,11 +182,19 @@ void checkForDownload() {
   debug2("Attempting to connect to ", host);
   if (client.connect(host, port)) {
     digitalWrite(downloadLED, HIGH);
-    client.print("GET "); client.print("/printer/"); client.print(printerId); client.println(" HTTP/1.0");
-    client.print("Host: "); client.print(host); client.print(":"); client.println(port);
+    client.print("GET "); 
+    client.print("/printer/"); 
+    client.print(printerId); 
+    client.println(" HTTP/1.0");
+    client.print("Host: "); 
+    client.print(host); 
+    client.print(":"); 
+    client.println(port);
     client.flush();
-    client.print("Accept: application/vnd.freerange.printer."); client.println(printerType);
-    client.print("X-Printer-Version: "); client.println(sketchVersion);
+    client.print("Accept: application/vnd.freerange.printer."); 
+    client.println(printerType);
+    client.print("X-Printer-Version: "); 
+    client.println(sketchVersion);
     client.println();
     boolean parsingHeader = true;
 
@@ -205,7 +218,8 @@ void checkForDownload() {
           debug2("Content length: ", content_length);
           client.find("\n\r\n"); // the first \r may already have been read above
           parsingHeader = false;
-        } else {
+        } 
+        else {
           cache.write(client.read());
           length++;
         }
@@ -220,25 +234,27 @@ void checkForDownload() {
     cache.seek(0);
 
     if (statusOk) {
-      if ((content_length == length) && (content_length == cache.size())) {
+ //     if ((content_length == length) && (content_length == cache.size())) {
         if (content_length > 0) {
           downloadWaiting = true;
           digitalWrite(readyLED, HIGH);
         }
-      }
+ //     }
 #ifdef DEBUG
-      else {
-        debug2("Failure, content length: ", content_length);
-        if (content_length != length) debug2("length: ", length);
-        if (content_length != cache.size()) debug2("cache: ", cache.size());
-        systemError();
-      }
+ //     else {
+ //       debug2("Failure, content length: ", content_length);
+//        if (content_length != length) debug2("length: ", length);
+//        if (content_length != cache.size()) debug2("cache: ", cache.size());
+//        systemError();
+//      }
 #endif
-    } else {
+    } 
+    else {
       debug("Response code != 200");
       recoverableError();
     }
-  } else {
+  } 
+  else {
     debug("Couldn't connect");
     recoverableError();
   }
@@ -292,10 +308,12 @@ void loop() {
     if (bouncer.read() == HIGH) {
       printFromDownload();
     }
-  } else {
+  } 
+  else {
     checkForDownload();
     if (!downloadWaiting) {
       delay(pollingDelay);
     }
   }
 }
+
