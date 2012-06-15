@@ -17,33 +17,6 @@ describe BackendServer::App do
     Resque.stubs(:enqueue)
   end
 
-  describe "polling printers" do
-    describe "with no data" do
-      it "returns an empty response" do
-        get "/printer/1"
-        last_response.body.must_be_empty
-      end
-    end
-
-    describe "where data exists" do
-      it "returns the data as the message body" do
-        printer = RemotePrinter.new("1")
-        RemotePrinter.stubs(:find).with("1").returns(printer)
-        printer.stubs(:data_to_print).returns("data")
-        get "/printer/1"
-        last_response.body.must_equal "data"
-      end
-    end
-
-    it "updates our record of the remote printer" do
-      printer = RemotePrinter.new("1")
-      RemotePrinter.stubs(:find).with("1").returns(printer)
-      printer.expects(:update).with(has_entries(type: "A2-bitmap", ip: "192.168.1.1"))
-      get "/printer/1", {}, {"HTTP_ACCEPT" => "application/vnd.freerange.printer.A2-bitmap",
-                             "REMOTE_ADDR" => "192.168.1.1"}
-    end
-  end
-
   describe "print submissions" do
     describe "when requested via GET without content or a URL" do
       it "directs people to the API" do
@@ -84,7 +57,7 @@ describe BackendServer::App do
       end
 
       it "stores the content in a publicly-accessible file" do
-        ContentStore.expects(:write_html_content).with("<p>Some content</p>", "abc123")
+        ContentStore.expects(:write_html_content).with("<p>Some content</p>", "abc123").returns("/path/to/file.html")
         post "/preview", {content: "<p>Some content</p>"}
       end
 
@@ -112,44 +85,6 @@ describe BackendServer::App do
         header 'Referer', 'http://some-external-app.example.com'
         post "/print/1", {content: "<p>Some content</p>"}
         last_response.ok?.must_equal true
-      end
-    end
-  end
-
-  describe "settings" do
-    describe "viewing printers" do
-      before do
-        printer = stub("remote_printer", id: "printer-id", type: "printer-type")
-        RemotePrinter.stubs(:find_by_ip).with("192.168.1.1").returns([printer])
-        get "/my-printer", {}, {"REMOTE_ADDR" => "192.168.1.1"}
-      end
-
-      it "should show printers polling from the same remote IP" do
-        last_response.body.must_match "ID: printer-id"
-      end
-    end
-
-    describe "generating a test print" do
-      before do
-        printer = stub("remote_printer", id: "printer-id", type: "printer-type")
-        RemotePrinter.stubs(:find).with("printer-id").returns(printer)
-        get "/my-printer/printer-id/test-page"
-      end
-
-      it "should render a page" do
-        last_response.ok?.must_equal true
-      end
-
-      it "should show the printer ID" do
-        last_response.body.must_match /ID: printer\-id/
-      end
-
-      it "should show the printer type" do
-        last_response.body.must_match /Type: printer\-type/
-      end
-
-      it "should show the printer URL" do
-        last_response.body.must_match url_regexp("/print/printer-id")
       end
     end
   end

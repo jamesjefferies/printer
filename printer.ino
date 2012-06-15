@@ -6,9 +6,9 @@
 #include <SoftwareSerial.h>
 #include <Bounce.h>
 
-// ------- Settings for YOU to change if you want ---------------------
+// -- Settings for YOU to change if you want
 
-byte mac[] = { 0x90, 0xA2, 0xDA, 0x00, 0x86, 0x67 }; // physical mac address
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED }; // physical mac address
 
 // The printerType controls the format of the data sent from the server
 // If you're using a completely different kind of printer, change this
@@ -33,24 +33,38 @@ const byte errorLED = 7;       // the red LED
 const byte downloadLED = 6;    // the amber LED
 const byte readyLED = 5;       // the green LED
 const byte buttonPin = 3;      // the print button
+const byte SD_Pin = 4;         // the SD Card SPI pin
 
-// --------------------------------------------------------------------
+#define DEBUG // When debug is enabled, log a bunch of stuff to the hardware Serial
 
-// #define DEBUG
+// -- Everything below here can be left alone
+
+const char* sketchVersion = "1.0.2";
+
+// -- Debugging
+
 #ifdef DEBUG
-#define debug(a) Serial.print(millis()); Serial.print(": "); Serial.println(a);
-#define debug2(a, b) Serial.print(millis()); Serial.print(": "); Serial.print(a); Serial.println(b);
+void debugTimeAndSeparator() {
+  Serial.print(millis()); Serial.print(": ");
+}
+void debug(char *a) {
+  debugTimeAndSeparator(); Serial.println(a);
+}
+#define debug2(a, b) debugTimeAndSeparator(); Serial.print(a); Serial.println(b);
 #else
 #define debug(a)
 #define debug2(a, b)
 #endif
 
+
+// -- Initialize the printer ID
+
 const byte idAddress = 0;
 char printerId[17]; // the unique ID for this printer.
 
-void initSettings() {
+inline void initSettings() {
   if ((EEPROM.read(idAddress) == 255) || (EEPROM.read(idAddress+1) == 255)) {
-    debug("Generating new printer ID.");
+    debug("Generating new ID");
     randomSeed(analogRead(0) * analogRead(5));
     for(int i = 0; i < 16; i += 2) {
       printerId[i] = random(48, 57); // 0-9
@@ -64,10 +78,13 @@ void initSettings() {
     }
   }
   printerId[16] = '\0';
-  debug2("Printer ID: ", printerId);
+  debug2("ID: ", printerId);
 }
 
-void initDiagnosticLEDs() {
+
+// -- Initialize the LEDs
+
+inline void initDiagnosticLEDs() {
   pinMode(errorLED, OUTPUT);
   pinMode(downloadLED, OUTPUT);
   pinMode(readyLED, OUTPUT);
@@ -80,32 +97,42 @@ void initDiagnosticLEDs() {
   digitalWrite(readyLED, LOW);
 }
 
+// -- Initialize the printer connection
+
 SoftwareSerial *printer;
 #define PRINTER_WRITE(b) printer->write(b)
 
-void initPrinter() {
+inline void initPrinter() {
   printer = new SoftwareSerial(printer_RX_Pin, printer_TX_Pin);
   printer->begin(19200);
 }
 
-const byte SD_Pin = 4;
-void initSD() {
+
+// -- Initialize the SD card
+
+inline void initSD() {
   pinMode(SD_Pin, OUTPUT);
   SD.begin(SD_Pin);
 }
 
+
+// -- Initialize the Ethernet connection & DHCP
+
 EthernetClient client;
-void initNetwork() {
+inline void initNetwork() {
   // start the Ethernet connection:
   if (Ethernet.begin(mac) == 0) {
-    debug("DHCP Failed");
+    debug("DHCP Fail!");
     // no point in carrying on, so do nothing forevermore:
     while(true);
   }
   delay(1000);
   // print your local IP address:
-  debug2("IP address: ", Ethernet.localIP());
+  debug2("IP: ", Ethernet.localIP());
 }
+
+
+// -- Setup; runs once on boot.
 
 void setup(){
 #ifdef DEBUG
@@ -119,18 +146,28 @@ void setup(){
   initDiagnosticLEDs();
 }
 
+
+// -- Check for new data and download if found
+
 boolean downloadWaiting = false;
 char* cacheFilename = "TMP";
 unsigned long content_length = 0;
+boolean statusOk = false;
 
 void checkForDownload() {
   unsigned long length = 0;
   content_length = 0;
+  statusOk = false;
+
+#ifdef DEBUG
+    unsigned long start;
+#endif
+
   if (SD.exists(cacheFilename)) {
     if (SD.remove(cacheFilename)) {
       debug("Cleared cache");
     } else {
-      debug("Failed to clear cache for some reason");
+      debug("Failed to clear cache");
     }
   }
   File cache = SD.open(cacheFilename, FILE_WRITE);
@@ -141,22 +178,30 @@ void checkForDownload() {
     digitalWrite(downloadLED, HIGH);
     client.print("GET "); client.print("/printer/"); client.print(printerId); client.println(" HTTP/1.0");
     client.print("Host: "); client.print(host); client.print(":"); client.println(port);
+    client.flush();
     client.print("Accept: application/vnd.freerange.printer."); client.println(printerType);
+    client.print("X-Printer-Version: "); client.println(sketchVersion);
     client.println();
     boolean parsingHeader = true;
+
 #ifdef DEBUG
-    unsigned long start = millis();
+    start = millis();
 #endif
+
     while(client.connected()) {
       debug("Still connected");
       while(client.available()) {
         if (parsingHeader) {
+          client.find("HTTP/1.1 ");
+          char *statusCode = "xxx";
+          client.readBytes(statusCode, 3);
+          statusOk = (strcmp(statusCode, "200") == 0);
           client.find("Content-Length: ");
           char c;
           while (isdigit(c = client.read())) {
             content_length = content_length*10 + (c - '0');
           }
-          debug2("Content length was: ", content_length);
+          debug2("Content length: ", content_length);
           client.find("\n\r\n"); // the first \r may already have been read above
           parsingHeader = false;
         } else {
@@ -164,59 +209,66 @@ void checkForDownload() {
           length++;
         }
       }
-      debug("No more data to read at the moment...");
+      debug("Waiting for data");
     }
 
-    debug("Server has disconnected");
+    debug("Server disconnected");
     digitalWrite(downloadLED, LOW);
     // Close the connection, and flush any unwritten bytes to the cache.
     client.stop();
     cache.seek(0);
-    boolean success = (content_length == length) && (content_length == cache.size());
-#ifdef DEBUG
-    if (!success) {
-      debug2("Failure, content length was ", content_length);
-      if (content_length != length) {
-        debug2("but length was ", length);
-      }
-      if (content_length != cache.size()) {
-        debug2("but cache size was ", cache.size());
-      }
-    }
-#endif
-    cache.close();
 
-#ifdef DEBUG
-    unsigned long duration = millis() - start;
-    debug2("Total bytes: ", length);
-    debug2("Duration: ", duration);
-    debug2("Speed: ", length/(duration/1000.0)); // NB - floating point math increases sketch size by ~2k
-#endif
-
-    if (success) {
-      if (content_length > 0) {
-        downloadWaiting = true;
-        digitalWrite(readyLED, HIGH);
+    if (statusOk) {
+      if ((content_length == length) && (content_length == cache.size())) {
+        if (content_length > 0) {
+          downloadWaiting = true;
+          digitalWrite(readyLED, HIGH);
+        }
       }
+#ifdef DEBUG
+      else {
+        debug2("Failure, content length: ", content_length);
+        if (content_length != length) debug2("length: ", length);
+        if (content_length != cache.size()) debug2("cache: ", cache.size());
+        systemError();
+      }
+#endif
     } else {
-      debug("Oh no, a failure.");
-      digitalWrite(errorLED, HIGH);
-      digitalWrite(downloadLED, HIGH);
+      debug("Response code != 200");
+      recoverableError();
     }
   } else {
     debug("Couldn't connect");
-    cache.close();
-    byte i = 5;
-    while(i--) {
-      digitalWrite(errorLED, HIGH);
-      delay(100);
-      digitalWrite(errorLED, LOW);
-      delay(100);
-    }
+    recoverableError();
+  }
+
+  cache.close();
+
+#ifdef DEBUG
+  unsigned long duration = millis() - start;
+  debug2("Bytes: ", length);
+  debug2("Duration: ", duration);
+#endif
+}
+
+inline void recoverableError() {
+  byte i = 5;
+  while(i--) {
+    digitalWrite(errorLED, HIGH);
+    delay(100);
+    digitalWrite(errorLED, LOW);
+    delay(100);
   }
 }
 
-void printFromDownload() {
+inline void systemError() {
+  digitalWrite(errorLED, HIGH);
+  // ... and stay on.
+}
+
+// -- Print send any data from the cache to the printer
+
+inline void printFromDownload() {
   File cache = SD.open(cacheFilename);
   byte b;
   while (content_length--) {
@@ -224,7 +276,12 @@ void printFromDownload() {
     PRINTER_WRITE(b);
   }
   cache.close();
+  downloadWaiting = false;
+  digitalWrite(readyLED, LOW);
 }
+
+
+// -- Check for new data, print if the button is pressed.
 
 Bounce bouncer = Bounce(buttonPin, 5); // 5 millisecond debounce
 
@@ -233,11 +290,11 @@ void loop() {
     bouncer.update();
     if (bouncer.read() == HIGH) {
       printFromDownload();
-      downloadWaiting = false;
-      digitalWrite(readyLED, LOW);
     }
   } else {
-    delay(pollingDelay);
     checkForDownload();
+    if (!downloadWaiting) {
+      delay(pollingDelay);
+    }
   }
 }

@@ -1,0 +1,20 @@
+<style>
+.font-sample {
+  font-size: 26px;
+}
+
+.font-name { 
+  font-size: 16px;
+  display: block;
+}
+</style>
+
+<% @fonts.each do |font| %>
+  <% sample = @fonts.pangram %>
+  <% sample = "<i>#{sample}</i>" if font =~ /Italic/ %>
+  <% sample = "<b>#{sample}</b>" if font =~ /Bold/ %>
+  <p>
+    <span class="font-sample" style="font-family: '<%= font %>';"><%= sample %></span>
+    <span class="font-name">(<%= font %>)</span>
+  </p>
+<% end %>
