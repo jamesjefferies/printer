@@ -4,7 +4,6 @@
 #include <EEPROM.h>
 
 #include <SoftwareSerial.h>
-#include <Bounce.h>
 
 // -- Settings for YOU to change if you want
 //HEATHCLIFF
@@ -233,20 +232,20 @@ void checkForDownload() {
     client.stop();
     cache.seek(0);
 
-    if (statusOk) {
- //     if ((content_length == length) && (content_length == cache.size())) {
+    if (statusOk) {         
+      if ((content_length == length) && (content_length == cache.size())) {
         if (content_length > 0) {
           downloadWaiting = true;
           digitalWrite(readyLED, HIGH);
         }
- //     }
+      }
 #ifdef DEBUG
- //     else {
- //       debug2("Failure, content length: ", content_length);
-//        if (content_length != length) debug2("length: ", length);
-//        if (content_length != cache.size()) debug2("cache: ", cache.size());
-//        systemError();
-//      }
+     else {
+        debug2("Failure, content length: ", content_length);
+        if (content_length != length) debug2("length: ", length);
+        if (content_length != cache.size()) debug2("cache: ", cache.size());
+        systemError();
+      }
 #endif
     } 
     else {
@@ -299,15 +298,9 @@ inline void printFromDownload() {
 
 
 // -- Check for new data, print if the button is pressed.
-
-Bounce bouncer = Bounce(buttonPin, 5); // 5 millisecond debounce
-
 void loop() {
   if (downloadWaiting) {
-    bouncer.update();
-    if (bouncer.read() == HIGH) {
       printFromDownload();
-    }
   } 
   else {
     checkForDownload();
